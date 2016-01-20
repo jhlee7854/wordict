@@ -110,6 +110,158 @@ mvn tomcat7:run
 ```
 
 ## 2. Spring MVC 설정
+Spring MVC 설정을 위해 의존성을 추가합니다.
+```xml
+<project>
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-webmvc</artifactId>
+      <version>${org.springframework.version}</version>
+    </dependency>
+  </dependencies>
+</project>
+```
+
+Spring MVC 설정을 합니다.
+```java
+package kr.pe.jady.wordict.config.spring.web;
+
+import org.springframework.web.servlet.support.AbstractAnnotationConfigDispatcherServletInitializer;
+
+public class WebAppInitializer extends AbstractAnnotationConfigDispatcherServletInitializer {
+
+    @Override
+    protected Class<?>[] getRootConfigClasses() {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    protected Class<?>[] getServletConfigClasses() {
+        return new Class[] {WebConfig.class};
+    }
+
+    @Override
+    protected String[] getServletMappings() {
+        return new String[] {"/"};
+    }
+    
+}
+```
+
+```java
+package kr.pe.jady.wordict.config.spring.web;
+
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.config.annotation.ViewResolverRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
+
+@Configuration
+@EnableWebMvc
+@ComponentScan(basePackages = {"kr.pe.jady.wordict"})
+public class WebConfig extends WebMvcConfigurerAdapter {
+
+    @Override
+    public void configureViewResolvers(ViewResolverRegistry registry) {
+        registry.jsp().prefix("WEB-INF/views").suffix(".jsp");
+    }
+    
+}
+```
+
+테스트를 위해 의존성을 추가합니다.
+```xml
+<project>
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.12</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-test</artifactId>
+      <version>${org.springframework.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <version>1.10.19</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
+```
+
+간단한 컨트롤러 테스트 코드를 작성합니다.
+```java
+package kr.pe.jady.wordict.common.controller;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.InjectMocks;
+import org.mockito.MockitoAnnotations;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.context.web.WebAppConfiguration;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import kr.pe.jady.wordict.config.spring.web.WebConfig;
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes = {WebConfig.class})
+@WebAppConfiguration
+public class HomeControllerTest {
+    
+    private MockMvc mockMvc;
+    @InjectMocks
+    private HomeController controller;
+    
+    @Before
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+    }
+
+    @Test
+    public void testMoveToHome() throws Exception {
+        mockMvc.perform(get("/home.do"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("/home"));
+    }
+
+}
+```
+
+컨트롤러를 작성합니다.
+```java
+package kr.pe.jady.wordict.common.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+
+@Controller
+public class HomeController {
+    
+    @RequestMapping(value = "/home.do", method = RequestMethod.GET)
+    public String moveToHome() {
+        return "/home";
+    }
+
+}
+```
 
 ## 3. Tiles 설정
 
@@ -121,3 +273,6 @@ mvn tomcat7:run
 
 ## References
 + [Tomcat Maven Plugin 설정](https://tomcat.apache.org/maven-plugin-trunk/tomcat7-maven-plugin/)
++ [Spring Framework Reference Documentation - 14.6. Spring MVC Test Framework](http://docs.spring.io/spring/docs/current/spring-framework-reference/htmlsingle/#spring-mvc-test-framework)
++ [Spring Framework Reference Documentation - 21.15. Code-based Servlet container initialization](http://docs.spring.io/spring/docs/current/spring-framework-reference/htmlsingle/#mvc-container-config)
++ [Spring Framework Reference Documentation - 21.16. Configuring Spring MVC](http://docs.spring.io/spring/docs/current/spring-framework-reference/htmlsingle/#mvc-config)
