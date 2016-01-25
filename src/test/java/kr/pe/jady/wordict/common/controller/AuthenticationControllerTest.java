@@ -9,39 +9,33 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
 import org.mockito.MockitoAnnotations;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
 import kr.pe.jady.wordict.config.spring.web.WebConfig;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(classes = {WebConfig.class})
 @WebAppConfiguration
-public class HomeControllerTest {
-	
+public class AuthenticationControllerTest {
+
 	private MockMvc mockMvc;
 	@InjectMocks
-	private HomeController controller;
-	@Autowired
-	private WebApplicationContext wac;
+	private AuthenticationController controller;
 	
 	@Before
 	public void setUp() {
 		MockitoAnnotations.initMocks(this);
-		//mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
-		mockMvc = MockMvcBuilders.webAppContextSetup(wac).build();
+		mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
 	}
-
+	
 	@Test
-	public void testMoveToHome() throws Exception {
-		mockMvc.perform(get("/home.do"))
+	public void testMoveToSignin() throws Exception {
+		mockMvc.perform(get("/signin.do"))
 			.andExpect(status().isOk())
-			.andExpect(view().name("/home"));
+			.andExpect(view().name("/signin"));
 	}
-
 }
