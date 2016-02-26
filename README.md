@@ -190,12 +190,15 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter
 
 @Configuration
 @EnableWebMvc
-@ComponentScan(basePackages = {"kr.pe.jady.wordict"})
+@ComponentScan(basePackages = {"kr.pe.jady.wordict"},
+        includeFilters = @ComponentScan.Filter(value = {Controller.class}),
+        excludeFilters = @ComponentScan.Filter(value = {Service.class, Repository.class}))
 public class WebConfig extends WebMvcConfigurerAdapter {
 
     @Override
     public void configureViewResolvers(ViewResolverRegistry registry) {
-        registry.jsp().prefix("WEB-INF/views").suffix(".jsp");
+        super.configureViewResolvers(registry);
+        registry.jsp("/WEB-INF/views", ".jsp");
     }
     
 }
@@ -277,7 +280,7 @@ public class HomeControllerTest {
 }
 ```
 
-컨트롤러를 작성합니다.
+@ComponentScan에 설정한 패키지 하위에 컨트롤러를 작성합니다.
 ```java
 package kr.pe.jady.wordict.common.controller;
 
@@ -350,7 +353,9 @@ package kr.pe.jady.wordict.config.spring.web;
 
 @Configuration
 @EnableWebMvc
-@ComponentScan(basePackages = {"kr.pe.jady.wordict"})
+@ComponentScan(basePackages = {"kr.pe.jady.wordict"},
+        includeFilters = @ComponentScan.Filter(value = {Controller.class}),
+        excludeFilters = @ComponentScan.Filter(value = {Service.class, Repository.class}))
 public class WebConfig extends WebMvcConfigurerAdapter {
 
     ...
@@ -432,6 +437,10 @@ xml을 이용해 로그백 설정을 할 경우에 Dispatcher Servlet Initialize
 사실상 해당 내용은 로그백 설정파일의 위치를 스프링 디스패처 서블릿에게 알려주기위해 설정하는 것 입니다.
 로그백 설정파일의 위치를 클래스 패스 최상위에 위치시키거나 java를 이용해 로그백 설정을 할 경우 다음 내용은 필요없습니다.
 ```java
+package kr.pe.jady.wordict.config.spring.web;
+
+...
+
 public class WebAppInitializer extends AbstractAnnotationConfigDispatcherServletInitializer {
 
     ...
@@ -553,6 +562,23 @@ public class LogbackConfig {
 }
 ```
 
+```java
+package kr.pe.jady.wordict.config.spring.web;
+
+...
+
+public class WebAppInitializer extends AbstractAnnotationConfigDispatcherServletInitializer {
+
+    @Override
+    protected Class<?>[] getRootConfigClasses() {
+        return new Class[] {LogbackConfig.class};
+    }
+    
+    ...
+    
+}
+```
+
 #### References
 + [Bootstrap 설정](http://getbootstrap.com/getting-started/#download)
 + [Spring Framework Reference Documentation - 2.3.2. Logging](http://docs.spring.io/spring/docs/current/spring-framework-reference/htmlsingle/#overview-logging)
@@ -586,19 +612,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.view.tiles3.SpringBeanPreparerFactory;
 import org.springframework.web.servlet.view.tiles3.TilesConfigurer;
-import org.springframework.web.servlet.view.tiles3.TilesView;
-import org.springframework.web.servlet.view.tiles3.TilesViewResolver;
 
 @Configuration
 public class TilesConfig {
-
-    @Bean
-    public TilesViewResolver getTilesViewResolver() {
-        TilesViewResolver tilesViewResolver = new TilesViewResolver();
-        tilesViewResolver.setOrder(0);
-        tilesViewResolver.setViewClass(TilesView.class);
-        return tilesViewResolver;
-    }
     
     @Bean
     public TilesConfigurer getTilesConfigurer() {
@@ -611,14 +627,19 @@ public class TilesConfig {
 }
 ```
 
-컨트롤러에서 반환된 뷰 이름을 통해 0순위로 타일즈 뷰를 찾고 없다면 jsp뷰를 찾도록 기존 뷰 리졸버 설정을 다음과 같이 변경합니다.
+타일즈 뷰를 이용할 수 있도록 뷰 리졸버 설정을 다음과 같이 변경합니다.
 ```java
+package kr.pe.jady.wordict.config.spring.web;
+
+...
+
 public class WebConfig extends WebMvcConfigurerAdapter {
 
     @Override
     public void configureViewResolvers(ViewResolverRegistry registry) {
-        registry.order(1);
-        registry.jsp().prefix("WEB-INF/views").suffix(".jsp");
+        super.configureViewResolvers(registry);
+        registry.tiles();
+        registry.jsp("/WEB-INF/views", ".jsp");
     }
     
     ...
@@ -626,7 +647,27 @@ public class WebConfig extends WebMvcConfigurerAdapter {
 }
 ```
 
-타일즈 설정 클래스에서 지정한 위치에 타일즈 페이지 정의 파일을 생성합니다.
+서블릿 설정에 타일즈 설정 클래스를 추가합니다.
+```java
+package kr.pe.jady.wordict.config.spring.web;
+
+...
+
+public class WebAppInitializer extends AbstractAnnotationConfigDispatcherServletInitializer {
+
+    ...
+
+    @Override
+    protected Class<?>[] getServletConfigClasses() {
+        return new Class[] {WebConfig.class, TilesConfig.class};
+    }
+    
+    ...
+    
+}
+```
+
+타일즈 설정 클래스에서 지정한 위치에 타일즈 페이지 정의 파일을 생성하고 파일에서 정의한 템플릿 파일의 위치에 해당 템플릿 파일들을 생성합니다. 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE tiles-definitions PUBLIC
@@ -654,11 +695,347 @@ public class WebConfig extends WebMvcConfigurerAdapter {
 </tiles-definitions>
 ```
 
+타일즈 설정을 완료하고 테스트를 수행하면 기존 테스트 코드에서 에러가 발생합니다.
+테스트 클래스의 @ContextConfiguration 어노테이션에 타일즈 설정 클래스를 추가합니다.
+```java
+package kr.pe.jady.wordict.common.controller;
+
+...
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes = {WebConfig.class, TilesConfig.class})
+@WebAppConfiguration
+public class HomeControllerTest {
+	
+	...
+
+}
+```
+
 #### References
 + [Tiles tutorial](http://tiles.apache.org/framework/tutorial/index.html)
 + [Spring Framework Reference Documentation - 22.8. Tiles](http://docs.spring.io/spring/docs/current/spring-framework-reference/htmlsingle/#view-tiles)
 + [Spring 어노테이션 기반의 Tiles Definitions 설정](http://springbybhimu.blogspot.kr/2015/01/spring-4-and-tiles-3-programmatic.html)
 
-## 6. Requirejs 설정
+## 6. JPA 설정
+JPA 설정을 위해 의존성을 추가합니다.
+```xml
+<project>
+  ...
+  <dependencies>
+    ...
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>1.4.191</version>
+      <scope>test</scope>
+    </dependency>
+    ...
+    <dependency>
+      <groupId>org.springframework.data</groupId>
+      <artifactId>spring-data-jpa</artifactId>
+      <version>1.9.2.RELEASE</version>
+    </dependency>
+    <dependency>
+      <groupId>org.hibernate</groupId>
+      <artifactId>hibernate-entitymanager</artifactId>
+      <version>5.1.0.Final</version>
+    </dependency>
+    ...
+  </dependencies>
+  ...
+</project>
+```
 
-## 7. JPA 설정
+데이터 소스 설정 클래스를 추가합니다.
+```java
+package kr.pe.jady.wordict.config.spring.app;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
+
+import javax.sql.DataSource;
+
+@Configuration
+public class DataSourceConfig {
+
+    @Bean(destroyMethod = "shutdown")
+    public DataSource dataSource() {
+        EmbeddedDatabaseBuilder embeddedDatabaseBuilder = new EmbeddedDatabaseBuilder();
+        return embeddedDatabaseBuilder
+                .setType(EmbeddedDatabaseType.H2)
+                .build();
+    }
+
+}
+```
+
+JPA 설정 클래스를 추가합니다.
+```java
+package kr.pe.jady.wordict.config.spring.app;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
+import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
+import org.springframework.stereotype.Controller;
+import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Service;
+
+import javax.persistence.EntityManagerFactory;
+import javax.sql.DataSource;
+
+@Configuration
+@EnableJpaRepositories(basePackages = {"kr.pe.jady.**.repository"},
+        includeFilters = @ComponentScan.Filter(value = {Repository.class}),
+        excludeFilters = @ComponentScan.Filter(value = {Controller.class, Service.class}))
+public class JpaConfig {
+
+    @Autowired
+    DataSource dataSource;
+
+    @Bean
+    public EntityManagerFactory entityManagerFactory() {
+        HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
+        vendorAdapter.setGenerateDdl(true);
+
+        LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
+        factory.setJpaVendorAdapter(vendorAdapter);
+        factory.setPackagesToScan("kr.pe.jady.wordict.domain.model");
+        factory.setDataSource(dataSource);
+        factory.afterPropertiesSet();
+
+        return factory.getObject();
+    }
+
+}
+```
+
+트랜잭션 설정 클래스를 추가합니다.
+```java
+package kr.pe.jady.wordict.config.spring.app;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.orm.jpa.JpaTransactionManager;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+import javax.persistence.EntityManagerFactory;
+
+@Configuration
+@EnableTransactionManagement
+public class TransactionConfig {
+
+    @Autowired
+    EntityManagerFactory entityManagerFactory;
+
+    @Bean
+    public PlatformTransactionManager transactionManager() {
+        JpaTransactionManager transactionManager = new JpaTransactionManager();
+        transactionManager.setEntityManagerFactory(entityManagerFactory);
+        return transactionManager;
+    }
+
+}
+```
+
+JPA 설정에서 EntityManagerFactoryBean의 packageToScan에 설정한 패키지 하위에 도메인 모델을 생성합니다.
+```java
+package kr.pe.jady.wordict.domain.model;
+
+import javax.persistence.*;
+import java.util.Date;
+
+@Entity(name = "users")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private Integer id;
+    private String name;
+    private String email;
+    private Date generated;
+
+    public User() {}
+
+    public User(String name, String email, Date generated) {
+        this.name = name;
+        this.email = email;
+        this.generated = generated;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public Date getGenerated() {
+        return generated;
+    }
+
+    public void setGenerated(Date generated) {
+        this.generated = generated;
+    }
+
+    @Override
+    public String toString() {
+        return "User{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", email='" + email + '\'' +
+                '}';
+    }
+}
+```
+
+설정 후 간단한 레파지토리 테스트 코드를 작성합니다.
+```java
+package kr.pe.jady.wordict.user.repository;
+
+import kr.pe.jady.wordict.config.spring.app.DataSourceConfig;
+import kr.pe.jady.wordict.config.spring.app.JpaConfig;
+import kr.pe.jady.wordict.config.spring.app.TransactionConfig;
+import kr.pe.jady.wordict.domain.model.User;
+import kr.pe.jady.wordict.user.vo.UserSearchVo;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes = {DataSourceConfig.class, JpaConfig.class, TransactionConfig.class})
+@Transactional
+public class UserRepositoryTest {
+
+    private static Integer NUMBER_OF_USERS = 3;
+    private User user1;
+    private User user2;
+    private User user3;
+
+    @Autowired
+    private UserRepository repository;
+
+    @Before
+    public void setUp() throws ParseException {
+        assertNotNull(repository);
+        user1 = repository.save(new User("홍길동", "gdHong@jady.pe.kr", new SimpleDateFormat("yyyyMMddHHmmss").parse("20160102000000")));
+        user2 = repository.save(new User("임꺾정", "kjYim@jady.pe.kr", new SimpleDateFormat("yyyyMMddHHmmss").parse("20160115000000")));
+        user3 = repository.save(new User("장길산", "ksJang@jady.pe.kr", new SimpleDateFormat("yyyyMMddHHmmss").parse("20160202000000")));
+    }
+
+    @After
+    public void tearDown() {
+
+    }
+
+    @Test
+    public void testFindAll() {
+        List<User> userList = repository.findAll();
+        assertEquals("전체 사용자의 수", NUMBER_OF_USERS.intValue(), userList.size());
+    }
+
+    @Test
+    public void testFindByGeneratedBetween() throws ParseException {
+        UserSearchVo vo = new UserSearchVo();
+        vo.setStartDt(new SimpleDateFormat("yyyyMMddHHmmss").parse("20160110000000"));
+        vo.setEndDt(new SimpleDateFormat("yyyyMMddHHmmss").parse("20160120000000"));
+
+        List<User> userList = repository.findByGeneratedBetween(vo.getStartDt(), vo.getEndDt());
+
+        assertEquals("검색된 사용자의 수", 1, userList.size());
+        assertEquals("검색된 사용자 비교", user2, userList.get(0));
+    }
+}
+```
+
+JpaConfig 클래스의 @ComponentScan에 설정한 패키지 하위에 레파지토리 인터페이스를 작성합니다. 
+```java
+package kr.pe.jady.wordict.user.repository;
+
+import kr.pe.jady.wordict.domain.model.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Date;
+import java.util.List;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Integer> {
+    List<User> findByGeneratedBetween(Date startDate, Date endDate);
+}
+```
+
+파라메터를 전달할 VO를 작성합니다.
+```java
+package kr.pe.jady.wordict.user.vo;
+
+import kr.pe.jady.wordict.domain.model.User;
+
+import java.util.Date;
+
+public class UserSearchVo extends User {
+    private Date startDt;
+    private Date endDt;
+
+    public Date getStartDt() {
+        return startDt;
+    }
+
+    public void setStartDt(Date startDt) {
+        this.startDt = startDt;
+    }
+
+    public Date getEndDt() {
+        return endDt;
+    }
+
+    public void setEndDt(Date endDt) {
+        this.endDt = endDt;
+    }
+}
+```
+
+### References
++ [Spring Data JPA Reference Documentation](http://docs.spring.io/spring-data/jpa/docs/current/reference/html/#jpa.query-methods)
+
+## 7. AOP 설정
+
+## 8. JSON 설정
+
+## 8. AngularJS 설정
