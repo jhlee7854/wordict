@@ -913,6 +913,36 @@ public class User {
 }
 ```
 
+파라메터를 전달할 VO를 작성합니다.
+```java
+package kr.pe.jady.wordict.user.vo;
+
+import kr.pe.jady.wordict.domain.model.User;
+
+import java.util.Date;
+
+public class UserSearchVo extends User {
+    private Date startDt;
+    private Date endDt;
+
+    public Date getStartDt() {
+        return startDt;
+    }
+
+    public void setStartDt(Date startDt) {
+        this.startDt = startDt;
+    }
+
+    public Date getEndDt() {
+        return endDt;
+    }
+
+    public void setEndDt(Date endDt) {
+        this.endDt = endDt;
+    }
+}
+```
+
 설정 후 간단한 레파지토리 테스트 코드를 작성합니다.
 ```java
 package kr.pe.jady.wordict.user.repository;
@@ -1001,41 +1031,382 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 }
 ```
 
-파라메터를 전달할 VO를 작성합니다.
+### References
++ [Spring Data JPA Reference Documentation](http://docs.spring.io/spring-data/jpa/docs/current/reference/html/#jpa.query-methods)
+
+## 7. AOP 설정
+서비스 레이어에서 예외 발생시 예외 정보를 DB에 기록하는 상황을 가정해 보겠습니다.
+
+서비스 레이어를 위한 어플리케이션 설정을 합니다.
 ```java
-package kr.pe.jady.wordict.user.vo;
+package kr.pe.jady.wordict.config.spring.app;
+
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.stereotype.Controller;
+import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Service;
+
+@Configuration
+@EnableAspectJAutoProxy
+@ComponentScan(basePackages = {"kr.pe.jady.**.service"},
+        includeFilters = @ComponentScan.Filter(value = {Service.class}),
+        excludeFilters = @ComponentScan.Filter(value = {Controller.class, Repository.class}))
+public class AppConfig {
+}
+```
+
+사용자 서비스를 정의합니다.
+```java
+package kr.pe.jady.wordict.user.service;
 
 import kr.pe.jady.wordict.domain.model.User;
+import kr.pe.jady.wordict.user.vo.UserSearchVo;
 
-import java.util.Date;
+import java.util.List;
 
-public class UserSearchVo extends User {
-    private Date startDt;
-    private Date endDt;
+public interface UserService {
+    public List<User> findBySearchConditions(UserSearchVo userSearchVo);
+}
+```
 
-    public Date getStartDt() {
-        return startDt;
+사용자 서비스 구현체를 만들기 위해 테스트 코드를 작성합니다.
+```java
+package kr.pe.jady.wordict.user.service;
+
+import kr.pe.jady.wordict.domain.model.User;
+import kr.pe.jady.wordict.user.repository.UserRepository;
+import kr.pe.jady.wordict.user.vo.UserSearchVo;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+import java.text.ParseException;
+import java.util.List;
+
+import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThat;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+
+public class UserServiceImplTest {
+
+    @InjectMocks
+    private UserService userService;
+
+    @Mock
+    private UserRepository repository;
+
+    @Before
+    public void setUp() throws ParseException {
+        userService = new UserServiceImpl();
+        MockitoAnnotations.initMocks(this);
     }
 
-    public void setStartDt(Date startDt) {
-        this.startDt = startDt;
+    @Test
+    public void testFindBySearchConditionsWithNoneConditions() {
+        UserSearchVo userSearchVo = new UserSearchVo();
+        List<User> actualUserList = userService.findBySearchConditions(userSearchVo);
+
+        assertNotNull("사용자 목록조회 메서드는 사용자 목록을 반환해야 한다.", actualUserList);
+        assertThat("사용자 목록조회 메서드는 사용자 목록을 반환해야 한다.", actualUserList, instanceOf(List.class));
+
+        verify(repository, times(1)).findAll();
     }
 
-    public Date getEndDt() {
-        return endDt;
+    @Test(expected = IllegalArgumentException.class)
+    public void testFindBySearchConditionsWithNullArgument() {
+        userService.findBySearchConditions(null);
+    }
+}
+```
+
+사용자 서비스 구현체를 작성합니다.
+```java
+package kr.pe.jady.wordict.user.service;
+
+import kr.pe.jady.wordict.domain.model.User;
+import kr.pe.jady.wordict.user.repository.UserRepository;
+import kr.pe.jady.wordict.user.vo.UserSearchVo;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class UserServiceImpl implements UserService {
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    public List<User> findBySearchConditions(UserSearchVo userSearchVo) {
+        if (userSearchVo == null) throw new IllegalArgumentException("입력값이 올바르지 않습니다.");
+        return userRepository.findAll();
+    }
+}
+```
+
+예외정보를 전달할 VO를 생성합니다.
+```java
+package kr.pe.jady.wordict.domain.model;
+
+import javax.persistence.*;
+
+@Entity(name = "system_exceptions")
+public class SystemException {
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private Integer id;
+    private String exceptionClassName;
+    private String message;
+    @Lob
+    private String stackTrace;
+
+    public Integer getId() {
+        return id;
     }
 
-    public void setEndDt(Date endDt) {
-        this.endDt = endDt;
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getExceptionClassName() {
+        return exceptionClassName;
+    }
+
+    public void setExceptionClassName(String exceptionClassName) {
+        this.exceptionClassName = exceptionClassName;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+
+    public String getStackTrace() {
+        return stackTrace;
+    }
+
+    public void setStackTrace(String stackTrace) {
+        this.stackTrace = stackTrace;
+    }
+
+    @Override
+    public String toString() {
+        return "SystemException{" +
+                "id=" + id +
+                ", exceptionClassName='" + exceptionClassName + '\'' +
+                ", message='" + message + '\'' +
+                ", stackTrace='" + stackTrace + '\'' +
+                '}';
+    }
+}
+```
+
+예외정보를 저장할 Repository를 생성합니다.
+```java
+package kr.pe.jady.wordict.system.repository;
+
+import kr.pe.jady.wordict.domain.model.SystemException;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface SystemExceptionRepository extends JpaRepository<SystemException, Integer> {
+}
+```
+
+AOP설정을 위해 의존성을 추가합니다.
+```xml
+<project>
+  ...
+  <dependencies>
+    ...
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-aop</artifactId>
+      <version>${org.springframework.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.aspectj</groupId>
+      <artifactId>aspectjweaver</artifactId>
+      <version>1.8.8</version>
+    </dependency>
+    ...
+  </dependencies>
+  ...
+</project>
+```
+
+예외처리 조인 포인트를 정의하는 포인트 컷을 작성합니다.
+```java
+package kr.pe.jady.wordict.config.spring.aop.pointcut;
+
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Pointcut;
+
+@Aspect
+public class ExceptionLoggingPointcut {
+    @Pointcut("execution(* kr.pe.jady.wordict..service.*.*(..))")
+    public void serviceOperation() {}
+}
+```
+
+예외처리 어드바이스 작성을 위해 테스트 코드를 작성합니다.
+```java
+package kr.pe.jady.wordict.config.spring.aop.advice;
+
+import kr.pe.jady.wordict.config.spring.app.AppConfig;
+import kr.pe.jady.wordict.config.spring.app.DataSourceConfig;
+import kr.pe.jady.wordict.config.spring.app.JpaConfig;
+import kr.pe.jady.wordict.config.spring.app.TransactionConfig;
+import kr.pe.jady.wordict.domain.model.SystemException;
+import kr.pe.jady.wordict.system.repository.SystemExceptionRepository;
+import org.apache.commons.lang.SystemUtils;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes = {AppConfig.class, DataSourceConfig.class, JpaConfig.class, TransactionConfig.class})
+@Transactional
+public class ExceptionLoggingAdviceTest {
+
+    @Autowired
+    private SystemExceptionRepository systemExceptionRepository;
+
+    @Test
+    public void testLogSystemException() {
+        String expectedExceptionMessage = "예외 처리 테스트";
+        Exception exception = new NullPointerException(expectedExceptionMessage);
+
+        StringBuilder stackTrace = new StringBuilder();
+        for (StackTraceElement element : exception.getStackTrace()) {
+            stackTrace.append(element.toString()).append(SystemUtils.LINE_SEPARATOR);
+        }
+        String expectedStackTrace = stackTrace.toString();
+
+        ExceptionLoggingAdvice advice = new ExceptionLoggingAdvice();
+        advice.setSystemExceptionRepository(systemExceptionRepository);
+
+        advice.logSystemException(exception);
+
+        List<SystemException> list = systemExceptionRepository.findAll();
+
+        assertEquals("예외 저장 내역 확인", 1, list.size());
+        assertEquals("예외 클래스명 비교", exception.getClass().getName(), list.get(0).getExceptionClassName());
+        assertEquals("예외 메시지 비교", expectedExceptionMessage, list.get(0).getMessage());
+        assertEquals("예외 stack trace 비교", expectedStackTrace, list.get(0).getStackTrace());
+    }
+}
+```
+
+예외처리 어드바이스를 작성합니다.
+```java
+package kr.pe.jady.wordict.config.spring.aop.advice;
+
+import kr.pe.jady.wordict.domain.model.SystemException;
+import kr.pe.jady.wordict.system.repository.SystemExceptionRepository;
+import org.apache.commons.lang.SystemUtils;
+import org.aspectj.lang.annotation.AfterThrowing;
+import org.aspectj.lang.annotation.Aspect;
+import org.springframework.beans.factory.annotation.Autowired;
+
+@Aspect
+public class ExceptionLoggingAdvice {
+
+    private SystemExceptionRepository systemExceptionRepository;
+
+    @Autowired
+    public void setSystemExceptionRepository(SystemExceptionRepository systemExceptionRepository) {
+        this.systemExceptionRepository = systemExceptionRepository;
+    }
+
+    @AfterThrowing(
+            pointcut = "kr.pe.jady.wordict.config.spring.aop.pointcut.ExceptionLoggingPointcut.serviceOperation()",
+            throwing = "ex")
+    public void logSystemException(Exception ex) {
+        SystemException systemException = new SystemException();
+        systemException.setExceptionClassName(ex.getClass().getName());
+        systemException.setMessage(ex.getMessage());
+        StringBuilder stackTrace = new StringBuilder();
+        for (StackTraceElement element : ex.getStackTrace()) {
+            stackTrace.append(element.toString()).append(SystemUtils.LINE_SEPARATOR);
+        }
+        systemException.setStackTrace(stackTrace.toString());
+
+        systemExceptionRepository.save(systemException);
+    }
+}
+```
+
+
+AOP가 적용되 었는지 확인하는 간단한 테스트 코드를 작성합니다.
+```java
+package kr.pe.jady.wordict.config.spring.aop.pointcut;
+
+import kr.pe.jady.wordict.config.spring.aop.advice.ExceptionLoggingAdvice;
+import kr.pe.jady.wordict.config.spring.app.AppConfig;
+import kr.pe.jady.wordict.config.spring.app.DataSourceConfig;
+import kr.pe.jady.wordict.config.spring.app.JpaConfig;
+import kr.pe.jady.wordict.config.spring.app.TransactionConfig;
+import kr.pe.jady.wordict.domain.model.SystemException;
+import kr.pe.jady.wordict.system.repository.SystemExceptionRepository;
+import kr.pe.jady.wordict.user.service.UserService;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes = {AppConfig.class, ExceptionLoggingPointcut.class, ExceptionLoggingAdvice.class, DataSourceConfig.class, JpaConfig.class, TransactionConfig.class})
+@Transactional
+public class ExceptionLoggingPointcutTest {
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private SystemExceptionRepository systemExceptionRepository;
+
+    @Test
+    public void testSavingExceptionInfoAtFindBySearchConditionsWithNullArgument() {
+        try {
+            userService.findBySearchConditions(null);
+        } catch (IllegalArgumentException e) {
+            List<SystemException> list = systemExceptionRepository.findAll();
+
+            assertEquals("예외 저장 내역", 1, list.size());
+        }
     }
 }
 ```
 
 ### References
-+ [Spring Data JPA Reference Documentation](http://docs.spring.io/spring-data/jpa/docs/current/reference/html/#jpa.query-methods)
-
-## 7. AOP 설정
++ [Spring Framework Reference Documentation - 10. Aspect Oriented Programming with Spring](http://docs.spring.io/spring/docs/current/spring-framework-reference/htmlsingle/#aop)
 
 ## 8. JSON 설정
 
-## 8. AngularJS 설정
+### References
+
